@@ -1,0 +1,26 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# --- Datos sensibles del proyecto (NUNCA subir) ---
+data/attendance.db
+data/attendance.db-*
+data/student_photos/*
+data/embeddings/*
+!data/student_photos/.gitkeep
+!data/embeddings/.gitkeep
+
+# --- Sistema operativo / editor ---
+.DS_Store
+.vscode/
+.idea/
+
+# --- uv ---
+# (uv.lock SÍ se sube — es intencional, asegura mismas versiones para todos)

@@ -148,3 +148,25 @@ def log_snapshot(engine, session_id: int, people_detected: int, people_identifie
                 people_identified=people_identified,
             )
         )
+
+
+def get_sessions_by_group(engine, group_id: int):
+    with engine.connect() as conn:
+        result = conn.execute(
+            select(class_sessions)
+            .where(class_sessions.c.group_id == group_id)
+            .where(class_sessions.c.status == "finished")
+            .order_by(class_sessions.c.started_at)
+        )
+        return result.fetchall()
+
+
+def get_events_for_student(engine, student_id: str):
+    """Todos los eventos de un estudiante, a través de todas sus sesiones."""
+    with engine.connect() as conn:
+        result = conn.execute(
+            select(attendance_events)
+            .where(attendance_events.c.student_id == student_id)
+            .order_by(attendance_events.c.timestamp)
+        )
+        return result.fetchall()

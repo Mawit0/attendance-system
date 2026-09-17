@@ -12,8 +12,10 @@ dependencies = [
     "numpy>=2.4.6",
     "onnxruntime>=1.30.0",
     "opencv-python>=5.0.0.93",
+    "plotly>=7.1.0",
     "sqlalchemy>=2.0.54",
     "streamlit>=1.64.0",
+    "ultralytics>=8.4.155",
 ]
 
 [build-system]

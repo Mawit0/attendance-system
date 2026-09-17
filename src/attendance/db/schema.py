@@ -83,3 +83,14 @@ attendance_events = Table(
     Column("timestamp", DateTime, nullable=False),
     CheckConstraint("event_type IN ('entry', 'exit')", name="valid_event_type"),
 )
+
+# agregar a src/attendance/db/schema.py
+
+session_snapshots = Table(
+    "session_snapshots", metadata,
+    Column("id", Integer, primary_key=True),
+    Column("session_id", Integer, ForeignKey("class_sessions.id"), nullable=False),
+    Column("timestamp", DateTime, nullable=False),
+    Column("people_detected", Integer, nullable=False),   # de YOLO
+    Column("people_identified", Integer, nullable=False), # de InsightFace (len de detected_ids)
+)

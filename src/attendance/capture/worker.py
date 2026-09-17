@@ -5,12 +5,14 @@ import time
 import cv2
 from pathlib import Path
 
+from attendance.recognition.person_detector import count_people
 from attendance.config import RECOGNITION_INTERVAL_SECONDS, DATA_DIR
 from attendance.db.connection import get_engine
 from attendance.db.queries import start_session, end_session
 from attendance.recognition.matcher import FaceMatcher
 from attendance.tracking.presence import PresenceTracker
 from attendance.enrollment.embeddings import get_face_app
+from attendance.db.queries import log_snapshot
 
 STOP_SIGNAL_PATH = DATA_DIR / ".stop_signal"
 CAMERA_INDEX = 1  # ajustar según qué índice le corresponda a Iriun
@@ -62,6 +64,8 @@ def run_worker(group_id: int) -> None:
                 time.sleep(RECOGNITION_INTERVAL_SECONDS)
                 continue
 
+            people_count = count_people(frame) 
+
             live_embeddings = detect_all_faces(frame)
             detected_ids = set()
 
@@ -71,6 +75,7 @@ def run_worker(group_id: int) -> None:
                     detected_ids.add(student_id)
 
             tracker.process_detected_students(detected_ids)
+            log_snapshot(engine, session_id, people_detected=people_count, people_identified=len(detected_ids))
             print(f"[{time.strftime('%H:%M:%S')}] Detectados: {detected_ids or 'ninguno'}")
 
             time.sleep(RECOGNITION_INTERVAL_SECONDS)
@@ -82,6 +87,7 @@ def run_worker(group_id: int) -> None:
         cap.release()
         clear_stop_signal()
         print("Worker detenido limpiamente.")
+        print(f"[{time.strftime('%H:%M:%S')}] Detectados: {detected_ids or 'ninguno'} | Personas visibles: {people_count}")
 
 
 if __name__ == "__main__":

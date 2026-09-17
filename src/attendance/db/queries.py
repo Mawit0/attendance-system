@@ -7,6 +7,7 @@ from sqlalchemy.engine import Engine
 from attendance.db.schema import (
     teachers, subjects, groups, students,
     face_embeddings, class_sessions, attendance_events,
+    session_snapshots,
 )
 
 
@@ -136,3 +137,14 @@ def get_active_session(engine, group_id: int):
         if len(rows) > 1:
             print(f"ADVERTENCIA: {len(rows)} sesiones activas simultáneas para group_id={group_id}")
         return rows[0] if rows else None
+
+def log_snapshot(engine, session_id: int, people_detected: int, people_identified: int) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            insert(session_snapshots).values(
+                session_id=session_id,
+                timestamp=datetime.utcnow(),
+                people_detected=people_detected,
+                people_identified=people_identified,
+            )
+        )

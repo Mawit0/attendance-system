@@ -123,3 +123,16 @@ def get_events_for_session(engine: Engine, session_id: int):
             select(attendance_events).where(attendance_events.c.session_id == session_id)
         )
         return result.fetchall()
+
+def get_active_session(engine, group_id: int):
+    with engine.connect() as conn:
+        result = conn.execute(
+            select(class_sessions)
+            .where(class_sessions.c.group_id == group_id)
+            .where(class_sessions.c.status == "active")
+            .order_by(class_sessions.c.started_at.desc())
+        )
+        rows = result.fetchall()
+        if len(rows) > 1:
+            print(f"ADVERTENCIA: {len(rows)} sesiones activas simultáneas para group_id={group_id}")
+        return rows[0] if rows else None

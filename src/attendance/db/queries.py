@@ -170,3 +170,16 @@ def get_events_for_student(engine, student_id: str):
             .order_by(attendance_events.c.timestamp)
         )
         return result.fetchall()
+
+def get_latest_snapshot(engine, session_id: int):
+    """El snapshot más reciente de una sesión — para mostrar el estado actual."""
+    from sqlalchemy import select
+    from attendance.db.schema import session_snapshots
+
+    with engine.connect() as conn:
+        result = conn.execute(
+            select(session_snapshots)
+            .where(session_snapshots.c.session_id == session_id)
+            .order_by(session_snapshots.c.timestamp.desc())
+        )
+        return result.first()

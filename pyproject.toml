@@ -7,11 +7,17 @@ authors = [
     { name = "Mawit0", email = "mauriciogab2003@gmail.com" }
 ]
 requires-python = ">=3.11, <3.12"
-dependencies = []
-
-[project.scripts]
-attendance-system = "attendance_system:main"
+dependencies = [
+    "insightface>=2.0",
+    "numpy>=2.4.6",
+    "onnxruntime>=1.30.0",
+    "opencv-python>=5.0.0.93",
+    "sqlalchemy>=2.0.54",
+]
 
 [build-system]
 requires = ["uv_build>=0.12.1,<0.13.0"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "attendance"

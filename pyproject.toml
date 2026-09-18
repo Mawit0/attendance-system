@@ -1,7 +1,7 @@
 [project]
 name = "attendance-system"
 version = "0.1.0"
-description = "Sistema local de reconocimiento facial y asistencia para salones de clase"
+description = "Local facial recognition attendance system for classrooms"
 readme = "README.md"
 authors = [
     { name = "Mawit0", email = "mauriciogab2003@gmail.com" }

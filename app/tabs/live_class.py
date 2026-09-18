@@ -38,9 +38,6 @@ def _compute_presence_intervals(events, session_end_fallback):
                 "end": e.timestamp,
             })
 
-    # Cualquier entry sin exit (sigue presente ahora mismo)
-    for student_id, start in open_entries.items():
-        intervals.append({"student_id": student_id, "start": start, "end": session_end_fallback})
 
     return intervals
 
@@ -51,6 +48,8 @@ def _live_status(engine, group_id: int):
     if session is None:
         st.warning("No hay sesión activa.")
         return
+
+
 
     all_students = get_students_by_group(engine, group_id)
     events = get_events_for_session(engine, session.id)

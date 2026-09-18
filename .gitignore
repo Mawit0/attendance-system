@@ -24,3 +24,6 @@ data/embeddings/*
 
 # --- uv ---
 # (uv.lock SÍ se sube — es intencional, asegura mismas versiones para todos)
+
+data/latest_frame.jpg
+

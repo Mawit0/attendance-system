@@ -122,13 +122,26 @@ sequenceDiagram
 
 ## Installation
 
-Requires Python 3.11 and [uv](https://docs.astral.sh/uv/getting-started/installation/) installed.
+Requires Python 3.11.
+
+This project uses [uv](https://docs.astral.sh/uv/) for dependency management, but the `pyproject.toml` follows the standard format and works with plain `pip` as well.
+
+**With uv (recommended):**
 
 ```bash
 git clone https://github.com/Mawit0/attendance-system.git
 cd attendance-system
-
 uv sync
+```
+
+**With pip:**
+
+```bash
+git clone https://github.com/Mawit0/attendance-system.git
+cd attendance-system
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -e .
 ```
 
 This installs all dependencies, including InsightFace and YOLO — the required model weights are downloaded automatically the first time each model runs.

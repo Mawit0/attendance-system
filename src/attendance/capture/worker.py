@@ -1,9 +1,18 @@
-# src/attendance/capture/worker.py
+"""Camera worker process.
+
+Runs as an independent subprocess (launched by Streamlit) to keep
+camera capture and ML inference off the main Streamlit thread — since
+Streamlit re-runs its script on every UI interaction, running face
+recognition inline would freeze the interface. This worker owns the
+camera connection, runs the recognition cycle, and writes all results
+directly to the database; the Streamlit UI only ever reads.
+"""
 
 import sys
 import time
-import cv2
 from pathlib import Path
+
+import cv2
 
 from attendance.config import RECOGNITION_INTERVAL_SECONDS, DATA_DIR
 from attendance.db.connection import get_engine
@@ -16,31 +25,58 @@ from attendance.enrollment.embeddings import get_face_app
 
 STOP_SIGNAL_PATH = DATA_DIR / ".stop_signal"
 LATEST_FRAME_PATH = DATA_DIR / "latest_frame.jpg"
-CAMERA_INDEX = 1  # Iriun, confirmado empíricamente
+
+# Camera index for Iriun Webcam, confirmed empirically on the
+# development machine (index 0 was the built-in laptop camera).
+# Adjust if running on a different setup.
+CAMERA_INDEX = 1
 
 
 def should_stop() -> bool:
+    """Check whether the Streamlit UI has requested this worker to stop.
+
+    Uses a flag file rather than OS signals, since it is simpler to
+    reason about, easy to trigger manually for debugging, and portable
+    across operating systems.
+    """
     return STOP_SIGNAL_PATH.exists()
 
 
 def clear_stop_signal() -> None:
+    """Remove the stop flag file, if present."""
     if STOP_SIGNAL_PATH.exists():
         STOP_SIGNAL_PATH.unlink()
 
 
 def detect_all_faces(frame) -> list:
-    """Regresa lista de (embedding, bbox) para cada cara detectada en el frame."""
+    """Detect every face in a frame and return their embeddings and boxes.
+
+    Returns:
+        A list of (embedding, bbox) tuples, one per detected face.
+    """
     app = get_face_app()
     faces = app.get(frame)
     return [(f.embedding, f.bbox) for f in faces]
 
 
 def run_worker(group_id: int) -> None:
+    """Run the camera worker loop for a class session.
+
+    Starts a new session, then repeatedly: captures a frame, runs
+    person detection (YOLO) and face recognition (InsightFace), feeds
+    the results into the presence tracker, logs a detection snapshot,
+    and sleeps until the next cycle. Stops when a stop signal is
+    detected or the process is interrupted, always finalizing the
+    session cleanly via the ``finally`` block.
+
+    Args:
+        group_id: ID of the group this class session belongs to.
+    """
     clear_stop_signal()
 
     engine = get_engine()
     session_id = start_session(engine, group_id=group_id)
-    print(f"Sesión iniciada: id={session_id}")
+    print(f"Session started: id={session_id}")
 
     matcher = FaceMatcher(engine)
     tracker = PresenceTracker(engine, session_id)
@@ -50,21 +86,21 @@ def run_worker(group_id: int) -> None:
 
     cap = cv2.VideoCapture(CAMERA_INDEX, cv2.CAP_AVFOUNDATION)
     if not cap.isOpened():
-        print("ERROR: no se pudo abrir la cámara.")
+        print("ERROR: could not open the camera.")
         sys.exit(1)
 
-    print(f"Worker corriendo. Revisando cada {RECOGNITION_INTERVAL_SECONDS}s. "
-          f"Crea {STOP_SIGNAL_PATH} para detener.")
+    print(f"Worker running. Checking every {RECOGNITION_INTERVAL_SECONDS}s. "
+          f"Create {STOP_SIGNAL_PATH} to stop.")
 
     try:
         while True:
             if should_stop():
-                print("Señal de detención recibida.")
+                print("Stop signal received.")
                 break
 
             ret, frame = cap.read()
             if not ret:
-                print("ADVERTENCIA: no se pudo leer frame de la cámara.")
+                print("WARNING: could not read a frame from the camera.")
                 time.sleep(RECOGNITION_INTERVAL_SECONDS)
                 continue
 
@@ -87,20 +123,20 @@ def run_worker(group_id: int) -> None:
             tracker.process_detected_students(detected_ids)
             log_snapshot(engine, session_id, people_detected=len(people_boxes), people_identified=len(detected_ids))
 
-            print(f"[{time.strftime('%H:%M:%S')}] Detectados: {detected_ids or 'ninguno'} "
-                  f"| Personas visibles: {len(people_boxes)}")
+            print(f"[{time.strftime('%H:%M:%S')}] Detected: {detected_ids or 'none'} "
+                  f"| People visible: {len(people_boxes)}")
 
             time.sleep(RECOGNITION_INTERVAL_SECONDS)
 
     finally:
-        print("Finalizando sesión...")
+        print("Finalizing session...")
         tracker.finalize_session()
         end_session(engine, session_id)
         cap.release()
         clear_stop_signal()
         if LATEST_FRAME_PATH.exists():
             LATEST_FRAME_PATH.unlink()
-        print("Worker detenido limpiamente.")
+        print("Worker stopped cleanly.")
 
 
 if __name__ == "__main__":

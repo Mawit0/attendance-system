@@ -1,4 +1,11 @@
-# app/tabs/live_class.py
+"""Live class tab.
+
+Lets the teacher start and stop a class session (launching/stopping
+the camera worker subprocess) and shows real-time attendance status
+while a session is active: a donut chart of presence categories, a bar
+chart of time present per student, a timeline of entry/exit events,
+and a photo grid of all students with a presence-colored border.
+"""
 
 import subprocess
 from datetime import datetime
@@ -15,15 +22,23 @@ from attendance.db.queries import (
     get_latest_snapshot,
 )
 from attendance.config import DATA_DIR
+from app.theme import apply_theme, render_student_card
 
 STOP_SIGNAL_PATH = DATA_DIR / ".stop_signal"
 GROUPS = {"9A": 1, "9B": 2}
 
 
-def _compute_presence_intervals(events, session_end_fallback):
-    """
-    Regresa una lista de dicts {student_id, start, end} por cada intervalo
-    entry->exit (o entry->ahora si sigue presente), para la timeline.
+def _compute_presence_intervals(events: list, session_end_fallback: datetime) -> list[dict]:
+    """Pair entry/exit events into presence intervals for the timeline.
+
+    Args:
+        events: A session's attendance events, any order.
+        session_end_fallback: Used as the interval's end time for a
+            student who is still present (has an "entry" with no
+            matching "exit" yet).
+
+    Returns:
+        A list of dicts with student_id, start, and end.
     """
     intervals = []
     open_entries = {}
@@ -38,18 +53,26 @@ def _compute_presence_intervals(events, session_end_fallback):
                 "end": e.timestamp,
             })
 
+    # Any entry without a matching exit means the student is still present.
+    for student_id, start in open_entries.items():
+        intervals.append({"student_id": student_id, "start": start, "end": session_end_fallback})
 
     return intervals
 
 
 @st.fragment(run_every=3)
 def _live_status(engine, group_id: int):
+    """Render the live status panel for the active session.
+
+    Wrapped as a fragment so it refreshes independently every 3
+    seconds without re-running the rest of the page (e.g. the
+    start/stop controls), reading fresh data from the database each
+    time the camera worker writes a new detection cycle.
+    """
     session = get_active_session(engine, group_id)
     if session is None:
-        st.warning("No hay sesión activa.")
+        st.warning("No active session.")
         return
-
-
 
     all_students = get_students_by_group(engine, group_id)
     events = get_events_for_session(engine, session.id)
@@ -66,28 +89,23 @@ def _live_status(engine, group_id: int):
     present_count = len(present_ids)
     absent_count = total - present_count
 
-    # --- Métricas rápidas ---
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total", total)
-    col2.metric("Presentes", present_count)
-    col3.metric("% Asistencia", f"{(present_count/total*100 if total else 0):.0f}%")
+    col2.metric("Present", present_count)
+    col3.metric("Attendance %", f"{(present_count/total*100 if total else 0):.0f}%")
     if snapshot:
-        col4.metric("Personas visibles (YOLO)", snapshot.people_detected)
+        col4.metric("People visible (YOLO)", snapshot.people_detected)
 
-    # --- Donut: presente / ausente / detectado-no-identificado ---
+    # People YOLO saw but InsightFace couldn't confidently identify.
     unidentified = 0
     if snapshot:
         unidentified = max(snapshot.people_detected - snapshot.people_identified, 0)
 
     donut_data = pd.DataFrame({
-        "categoria": ["Presentes (identificados)", "Ausentes", "Detectados sin identificar"],
-        "cantidad": [present_count, max(absent_count - unidentified, 0), unidentified],
+        "category": ["Present (identified)", "Absent", "Detected but unidentified"],
+        "count": [present_count, max(absent_count - unidentified, 0), unidentified],
     })
-    fig_donut = px.pie(donut_data, names="categoria", values="cantidad", hole=0.5,
-                        title="Estado actual de la clase")
-    st.plotly_chart(fig_donut, width="stretch")
 
-    # --- Bar chart: tiempo de permanencia por estudiante ---
     intervals = _compute_presence_intervals(events, datetime.utcnow())
     time_by_student = {}
     for interval in intervals:
@@ -96,44 +114,53 @@ def _live_status(engine, group_id: int):
 
     student_lookup = {s.id: s.full_name for s in all_students}
     bar_data = pd.DataFrame([
-        {"Estudiante": student_lookup.get(sid, sid), "Minutos presente": round(secs / 60, 1)}
+        {"Student": student_lookup.get(sid, sid), "Minutes present": round(secs / 60, 1)}
         for sid, secs in time_by_student.items()
     ])
 
-    if not bar_data.empty:
-        bar_data = bar_data.sort_values("Minutos presente", ascending=True)
-        fig_bar = px.bar(bar_data, x="Minutos presente", y="Estudiante", orientation="h",
-                          title="Tiempo de permanencia (minutos)")
-        st.plotly_chart(fig_bar, width="stretch")
+    col_donut, col_bar = st.columns(2)
 
-    # --- Timeline de entradas/salidas ---
+    with col_donut:
+        fig_donut = px.pie(donut_data, names="category", values="count", hole=0.5,
+                            title="Current class status")
+        fig_donut.update_layout(height=320)
+        st.plotly_chart(apply_theme(fig_donut), width="stretch")
+
+    with col_bar:
+        if not bar_data.empty:
+            bar_data = bar_data.sort_values("Minutes present", ascending=True)
+            fig_bar = px.bar(bar_data, x="Minutes present", y="Student", orientation="h",
+                              title="Time present (minutes)")
+            fig_bar.update_layout(height=320)
+            st.plotly_chart(apply_theme(fig_bar), width="stretch")
+
     if intervals:
         timeline_data = pd.DataFrame([
             {
-                "Estudiante": student_lookup.get(i["student_id"], i["student_id"]),
-                "Inicio": i["start"],
-                "Fin": i["end"],
+                "Student": student_lookup.get(i["student_id"], i["student_id"]),
+                "Start": i["start"],
+                "End": i["end"],
             }
             for i in intervals
         ])
-        fig_timeline = px.timeline(timeline_data, x_start="Inicio", x_end="Fin", y="Estudiante",
-                                    title="Línea de tiempo de presencia")
-        st.plotly_chart(fig_timeline, width="stretch")
+        fig_timeline = px.timeline(timeline_data, x_start="Start", x_end="End", y="Student",
+                                    title="Presence timeline")
+        fig_timeline.update_layout(height=280)
+        st.plotly_chart(apply_theme(fig_timeline), width="stretch")
 
-    # --- Tablas de respaldo (detalle) ---
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.subheader("Presentes")
-        present_students = [s for s in all_students if s.id in present_ids]
-        st.table([{"Matrícula": s.id, "Nombre": s.full_name} for s in present_students])
-    with col_b:
-        st.subheader("Ausentes")
-        absent_students = [s for s in all_students if s.id not in present_ids]
-        st.table([{"Matrícula": s.id, "Nombre": s.full_name} for s in absent_students])
+    st.subheader("Students")
+
+    # Present students are shown first.
+    sorted_students = sorted(all_students, key=lambda s: s.id not in present_ids)
+    cols = st.columns(7)
+    for idx, student in enumerate(sorted_students):
+        with cols[idx % 7]:
+            render_student_card(student.id, student.full_name, student.id in present_ids)
 
 
 def render():
-    st.header("Clase en vivo")
+    """Render the Live Class tab: session controls plus live status."""
+    st.header("Live Class")
     engine = get_engine()
 
     if "worker_process" not in st.session_state:
@@ -142,9 +169,9 @@ def render():
         st.session_state.group_id = None
 
     if st.session_state.worker_process is None:
-        group_name = st.selectbox("Selecciona el grupo", options=list(GROUPS.keys()))
+        group_name = st.selectbox("Select the group", options=list(GROUPS.keys()), key="live_class_group")
 
-        if st.button("Iniciar clase", disabled=st.session_state.get("starting", False)):
+        if st.button("Start class", disabled=st.session_state.get("starting", False)):
             st.session_state.starting = True
             group_id = GROUPS[group_name]
             process = subprocess.Popen(
@@ -155,9 +182,9 @@ def render():
             st.session_state.starting = False
             st.rerun()
     else:
-        st.success("Clase activa")
+        st.success("Class in progress")
 
-        if st.button("Terminar clase"):
+        if st.button("End class"):
             STOP_SIGNAL_PATH.touch()
             st.session_state.worker_process.wait(timeout=30)
             st.session_state.worker_process = None

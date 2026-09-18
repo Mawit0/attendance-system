@@ -9,21 +9,24 @@ wheels/
 # Virtual environments
 .venv
 
-# --- Datos sensibles del proyecto (NUNCA subir) ---
+# --- Sensitive project data (NEVER commit) ---
 data/attendance.db
 data/attendance.db-*
 data/student_photos/*
 data/embeddings/*
+data/institutional_photos/*
+data/latest_frame.jpg
 !data/student_photos/.gitkeep
 !data/embeddings/.gitkeep
+!data/institutional_photos/.gitkeep
 
-# --- Sistema operativo / editor ---
+# --- OS / editor ---
 .DS_Store
 .vscode/
 .idea/
 
+# --- ML model weights (downloaded automatically on first run) ---
+yolo11n.pt
+
 # --- uv ---
-# (uv.lock SÍ se sube — es intencional, asegura mismas versiones para todos)
-
-data/latest_frame.jpg
-
+# (uv.lock IS committed intentionally — ensures consistent versions for everyone)
